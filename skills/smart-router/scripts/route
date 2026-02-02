@@ -1,0 +1,6 @@
+#!/bin/bash
+# 智能模型路由器
+# 用法: ./route "用户的问题"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+python3 "$SCRIPT_DIR/route.py" "$@"
