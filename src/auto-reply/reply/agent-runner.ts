@@ -44,6 +44,54 @@ import { createTypingSignaler } from "./typing-mode.js";
 
 const BLOCK_REPLY_SEND_TIMEOUT_MS = 15_000;
 
+function stripFalseCapabilityClaims(
+  text: string,
+  flags: { canWrite: boolean; canExec: boolean },
+): string {
+  if (!text || (!flags.canWrite && !flags.canExec)) {
+    return text;
+  }
+  const lines = text.split(/\r?\n/);
+  const filtered = lines.filter((line) => {
+    const normalized = line.trim();
+    if (!normalized) {
+      return true;
+    }
+    const lower = normalized.toLowerCase();
+    if (flags.canWrite) {
+      if (
+        /没有文件写入权限|无法创建文件|无法写入文件|不能创建文件|不能写入文件/.test(normalized) ||
+        (/[无不][法能可以]|没有权限|无权限/.test(normalized) &&
+          /(创建|写入|生成).*(文件|目录)/.test(normalized)) ||
+        (/cannot|can't|unable|no permission/.test(lower) &&
+          /(create|write|edit).*(file|files|directory|folder)/.test(lower))
+      ) {
+        return false;
+      }
+    }
+    if (flags.canExec) {
+      if (
+        /无法执行命令|不能执行命令|无法运行代码|不能运行代码|没有ssh|无法ssh|无法连接ssh|没有节点访问/.test(
+          normalized,
+        ) ||
+        (/[无不][法能可以]|没有权限|无权限/.test(normalized) &&
+          /(执行|运行).*(命令|脚本|程序)/.test(normalized)) ||
+        (/cannot|can't|unable|no permission/.test(lower) &&
+          /(run|execute).*(command|commands|script|scripts)/.test(lower)) ||
+        /(no|without)\s+ssh/.test(lower)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
+  const cleaned = filtered.join("\n").trim();
+  if (!cleaned && text.trim()) {
+    return "（已移除不准确的权限描述，请继续具体需求。）";
+  }
+  return cleaned || text;
+}
+
 export async function runReplyAgent(params: {
   commandBody: string;
   followupRun: FollowupRun;
@@ -362,6 +410,21 @@ export async function runReplyAgent(params: {
     }
 
     const payloadArray = runResult.payloads ?? [];
+    const toolEntries = runResult.meta.systemPromptReport?.tools?.entries ?? [];
+    const toolNames = new Set(toolEntries.map((tool) => tool.name.toLowerCase()));
+    const capabilityFlags = {
+      canWrite: toolNames.has("write") || toolNames.has("edit") || toolNames.has("apply_patch"),
+      canExec: toolNames.has("exec"),
+    };
+    const sanitizedPayloadArray = payloadArray.map((payload) => {
+      if (!payload.text) {
+        return payload;
+      }
+      return {
+        ...payload,
+        text: stripFalseCapabilityClaims(payload.text, capabilityFlags),
+      };
+    });
 
     if (blockReplyPipeline) {
       await blockReplyPipeline.flush({ force: true });
@@ -403,7 +466,7 @@ export async function runReplyAgent(params: {
     }
 
     const payloadResult = buildReplyPayloads({
-      payloads: payloadArray,
+      payloads: sanitizedPayloadArray,
       isHeartbeat,
       didLogHeartbeatStrip,
       blockStreamingEnabled,

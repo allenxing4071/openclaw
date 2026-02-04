@@ -11,6 +11,15 @@ WORKDIR /app
 ARG OPENCLAW_DOCKER_APT_PACKAGES=""
 RUN if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
       apt-get update && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl gnupg && \
+      case " $OPENCLAW_DOCKER_APT_PACKAGES " in \
+        *" docker-ce-cli "*) \
+          install -m 0755 -d /etc/apt/keyrings && \
+          curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
+          chmod a+r /etc/apt/keyrings/docker.gpg && \
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list && \
+          apt-get update ;; \
+      esac && \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $OPENCLAW_DOCKER_APT_PACKAGES && \
       apt-get clean && \
       rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
@@ -30,6 +39,9 @@ ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
 
 ENV NODE_ENV=production
+
+# Ensure home directory exists for runtime writes.
+RUN mkdir -p /home/node && chown -R node:node /home/node
 
 # Allow non-root user to write temp files during runtime/tests.
 RUN chown -R node:node /app

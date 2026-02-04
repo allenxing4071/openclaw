@@ -15,34 +15,34 @@ import re
 # 模型定义 - 各模型发挥专长
 MODELS = {
     "code": {
-        "id": "ollama/qwen3-coder:480b-cloud",
-        "name": "Qwen3 Coder 480B",
-        "fallback": "ollama/qwen2.5-coder:32b",
-        "description": "代码生成、调试、重构 (专业代码模型)"
+        "id": "deepseek/deepseek-coder",
+        "name": "DeepSeek Coder",
+        "fallback": "qwen/qwen-turbo",
+        "description": "代码生成、调试、重构 (DeepSeek Coder)"
     },
     "vision": {
-        "id": "ollama/qwen3-vl:235b-cloud",
-        "name": "Qwen3 VL 235B",
-        "fallback": "ollama/qwen3-vl:30b",
-        "description": "图片理解、视觉分析 (专业视觉模型)"
+        "id": "qwen/qwen-plus",
+        "name": "Qwen Plus",
+        "fallback": "deepseek/deepseek-chat",
+        "description": "图片理解、视觉分析 (Qwen Plus)"
     },
     "reasoning": {
-        "id": "ollama/deepseek-v3.1:671b-cloud",
-        "name": "DeepSeek V3.1 671B",
-        "fallback": "deepseek/deepseek-reasoner",
-        "description": "复杂推理、深度分析 (671B最强推理)"
+        "id": "deepseek/deepseek-reasoner",
+        "name": "DeepSeek R1 (Reasoning)",
+        "fallback": "deepseek/deepseek-chat",
+        "description": "复杂推理、深度分析 (DeepSeek R1)"
     },
     "fast": {
-        "id": "ollama/qwen3:8b",
-        "name": "Qwen3 8B (本地)",
-        "fallback": "google/gemini-2.5-flash",
-        "description": "快速响应、简单问题 (本地零延迟)"
+        "id": "qwen/qwen-turbo",
+        "name": "Qwen Turbo",
+        "fallback": "deepseek/deepseek-chat",
+        "description": "快速响应、简单问题 (Qwen Turbo)"
     },
     "general": {
-        "id": "ollama/deepseek-v3.1:671b-cloud",
-        "name": "DeepSeek V3.1 671B",
-        "fallback": "google/gemini-2.5-pro",
-        "description": "通用对话、综合任务 (671B通用最强)"
+        "id": "deepseek/deepseek-chat",
+        "name": "DeepSeek Chat",
+        "fallback": "qwen/qwen-plus",
+        "description": "通用对话、综合任务 (DeepSeek Chat)"
     }
 }
 
