@@ -3,6 +3,8 @@ services:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
     environment:
       HOME: /home/node
+      OPENCLAW_HOME: /home/node
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
       TERM: xterm-256color
       OPENCLAW_DOCKER_PATH: /usr/bin/docker
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
@@ -12,6 +14,7 @@ services:
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
+      - /Users/allenxing00/Documents:/home/node/.openclaw/workspace/documents:ro
       - /var/run/docker.sock:/var/run/docker.sock
     user: root
     ports:
@@ -19,16 +22,9 @@ services:
       - "${OPENCLAW_BRIDGE_PORT:-18792}:18792"
     init: true
     restart: unless-stopped
+    entrypoint: ["sh", "-c"]
     command:
-      [
-        "node",
-        "dist/index.js",
-        "gateway",
-        "--bind",
-        "${OPENCLAW_GATEWAY_BIND:-lan}",
-        "--port",
-        "18791",
-      ]
+      - "mkdir -p /home/node /home/node/.openclaw && exec node dist/index.js gateway --bind ${OPENCLAW_GATEWAY_BIND:-lan} --port 18791"
 
   openclaw-cli:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
