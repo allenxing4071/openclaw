@@ -58,6 +58,13 @@ REMOTE_USER="${REMOTE_USER:-allenxing00}"
 REMOTE_PROJECT_DIR="${REMOTE_PROJECT_DIR:-/Users/allenxing00/Documents/soft/openclaw}"
 REMOTE_SSH_KEY="${REMOTE_SSH_KEY:-}"
 
+# 云服务器部署配置（47.237.80.83）
+CLOUD_REMOTE_HOST="${CLOUD_REMOTE_HOST:-47.237.80.83}"
+CLOUD_REMOTE_PORT="${CLOUD_REMOTE_PORT:-22}"
+CLOUD_REMOTE_USER="${CLOUD_REMOTE_USER:-root}"
+CLOUD_REMOTE_PROJECT_DIR="${CLOUD_REMOTE_PROJECT_DIR:-/opt/openclaw}"
+CLOUD_REMOTE_SSH_KEY="${CLOUD_REMOTE_SSH_KEY:-$HOME/Downloads/Openclaw.pem}"
+
 # 部署锁（防止并发部署）
 DEPLOY_LOCK="/tmp/openclaw-deploy.lock"
 DEPLOY_LOCK_ACQUIRED=0
@@ -516,6 +523,79 @@ do_remote_deploy() {
     echo ""
 }
 
+do_remote_deploy_cloud() {
+    # 备份当前 REMOTE_* 配置，方便恢复
+    local old_REMOTE_HOST="$REMOTE_HOST"
+    local old_REMOTE_PORT="$REMOTE_PORT"
+    local old_REMOTE_USER="$REMOTE_USER"
+    local old_REMOTE_PROJECT_DIR="$REMOTE_PROJECT_DIR"
+    local old_REMOTE_SSH_KEY="$REMOTE_SSH_KEY"
+    local old_RESOLVED_SSH_HOST="$RESOLVED_SSH_HOST"
+    local old_RESOLVED_SSH_PORT="$RESOLVED_SSH_PORT"
+
+    REMOTE_HOST="$CLOUD_REMOTE_HOST"
+    REMOTE_PORT="$CLOUD_REMOTE_PORT"
+    REMOTE_USER="$CLOUD_REMOTE_USER"
+    REMOTE_PROJECT_DIR="$CLOUD_REMOTE_PROJECT_DIR"
+    REMOTE_SSH_KEY="$CLOUD_REMOTE_SSH_KEY"
+    unset RESOLVED_SSH_HOST RESOLVED_SSH_PORT
+
+    check_remote_config
+    _resolve_ssh_target || {
+        REMOTE_HOST="$old_REMOTE_HOST"
+        REMOTE_PORT="$old_REMOTE_PORT"
+        REMOTE_USER="$old_REMOTE_USER"
+        REMOTE_PROJECT_DIR="$old_REMOTE_PROJECT_DIR"
+        REMOTE_SSH_KEY="$old_REMOTE_SSH_KEY"
+        RESOLVED_SSH_HOST="$old_RESOLVED_SSH_HOST"
+        RESOLVED_SSH_PORT="$old_RESOLVED_SSH_PORT"
+        exit 1
+    }
+    acquire_deploy_lock
+
+    echo ""
+    echo -e "${BOLD}${CYAN}═══════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}${CYAN}  OpenClaw 远程部署（云服务器）${NC}"
+    echo -e "${BOLD}${CYAN}  目标: ${REMOTE_USER}@${RESOLVED_SSH_HOST}:${RESOLVED_SSH_PORT} → ${REMOTE_PROJECT_DIR}${NC}"
+    echo -e "${BOLD}${CYAN}═══════════════════════════════════════════════${NC}"
+    echo ""
+
+    log "检查远程目录..."
+    remote_ssh "mkdir -p '$REMOTE_PROJECT_DIR'"
+
+    log "同步代码到远程..."
+    remote_rsync
+
+    log "远程重建并启动服务（可能需要几分钟）..."
+    remote_ssh "cd '$REMOTE_PROJECT_DIR' && docker compose -f docker-compose.yml build --build-arg OPENCLAW_DOCKER_APT_PACKAGES='docker-ce-cli' && docker compose -f docker-compose.yml up -d openclaw-gateway"
+
+    log "远程健康检查..."
+    remote_ssh "cd '$REMOTE_PROJECT_DIR' && for i in \$(seq 1 15); do code=\$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 'http://localhost:${GATEWAY_PORT}' 2>/dev/null || echo 000); if [ \"\$code\" != \"000\" ]; then echo 'health ok (HTTP='\$code')'; exit 0; fi; sleep 3; done; exit 1"
+
+    log "尝试重载远程 Nginx..."
+    remote_ssh "docker exec '$NGINX_CONTAINER' nginx -s reload >/dev/null 2>&1 || true"
+
+    release_deploy_lock
+
+    echo ""
+    ok "远程部署完成（云服务器）！"
+    echo ""
+    echo -e "  ${CYAN}连接方式${NC}: ${RESOLVED_SSH_HOST}:${RESOLVED_SSH_PORT}"
+    echo -e "  ${CYAN}Web UI${NC}:  https://${DOMAIN}"
+    echo -e "  ${CYAN}Gateway${NC}: 端口 ${GATEWAY_PORT}"
+    echo -e "  ${CYAN}Bridge${NC}:  端口 ${BRIDGE_PORT}"
+    echo ""
+
+    # 恢复 REMOTE_* 配置
+    REMOTE_HOST="$old_REMOTE_HOST"
+    REMOTE_PORT="$old_REMOTE_PORT"
+    REMOTE_USER="$old_REMOTE_USER"
+    REMOTE_PROJECT_DIR="$old_REMOTE_PROJECT_DIR"
+    REMOTE_SSH_KEY="$old_REMOTE_SSH_KEY"
+    RESOLVED_SSH_HOST="$old_RESOLVED_SSH_HOST"
+    RESOLVED_SSH_PORT="$old_RESOLVED_SSH_PORT"
+}
+
 do_remote_status() {
     check_remote_config
     _resolve_ssh_target || exit 1
@@ -562,6 +642,7 @@ show_menu() {
     echo -e "    ${GREEN}a${NC}) remote-deploy  SSH 远程部署"
     echo -e "    ${GREEN}b${NC}) remote-status  SSH 查看远程状态"
     echo -e "    ${GREEN}c${NC}) remote-logs    SSH 查看远程日志"
+    echo -e "    ${GREEN}d${NC}) remote-deploy-cloud  SSH 远程部署（云服务器 47.237.80.83）"
     echo ""
     echo -ne "  请选择 [0-9/a-c]: "
     read -r choice
@@ -580,6 +661,7 @@ show_menu() {
         a|remote-deploy) do_remote_deploy ;;
         b|remote-status) do_remote_status ;;
         c|remote-logs)   do_remote_logs ;;
+        d|remote-deploy-cloud) do_remote_deploy_cloud ;;
         *)          err "无效选择: $choice" ;;
     esac
 }
@@ -601,6 +683,7 @@ main() {
         nginx|n)        do_nginx_reload ;;
         ssl-check|ssl)  do_ssl_check ;;
         remote-deploy|rd)  do_remote_deploy ;;
+        remote-deploy-cloud|rdc)  do_remote_deploy_cloud ;;
         remote-status|rs)  do_remote_status ;;
         remote-logs|rl)    do_remote_logs ;;
         help|--help|-h)
